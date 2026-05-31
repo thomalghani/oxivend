@@ -1,6 +1,6 @@
 //! Unit tests for authentication functions.
 
-use oxivend::auth::{create_token, hash_password, validate_token, verify_password};
+use oxivend::auth::{create_access_token, hash_password, validate_access_token, verify_password};
 use uuid::Uuid;
 
 #[test]
@@ -27,34 +27,37 @@ fn test_password_verify_invalid_hash() {
 }
 
 #[test]
-fn test_token_create_and_validate_roundtrip() {
+fn test_access_token_create_and_validate_roundtrip() {
     let user_id = Uuid::new_v4();
     let secret = "my-secret-key";
+    let ttl = 900;
 
-    let token = create_token(user_id, secret).expect("token creation should succeed");
-    let claims = validate_token(&token, secret).expect("token validation should succeed");
+    let token = create_access_token(user_id, secret, ttl).expect("token creation should succeed");
+    let claims = validate_access_token(&token, secret).expect("token validation should succeed");
 
     assert_eq!(claims.sub, user_id.to_string());
     assert!(claims.iat > 0);
     assert!(claims.exp > claims.iat);
+    assert_eq!(claims.exp - claims.iat, ttl as usize);
 }
 
 #[test]
-fn test_token_validate_wrong_secret() {
+fn test_access_token_validate_wrong_secret() {
     let user_id = Uuid::new_v4();
-    let token = create_token(user_id, "correct-secret").expect("token creation should succeed");
-    let result = validate_token(&token, "wrong-secret");
+    let token =
+        create_access_token(user_id, "correct-secret", 900).expect("token creation should succeed");
+    let result = validate_access_token(&token, "wrong-secret");
     assert!(result.is_err(), "validation with wrong secret should fail");
 }
 
 #[test]
-fn test_token_validate_malformed() {
-    let result = validate_token("not-a-jwt-token", "secret");
+fn test_access_token_validate_malformed() {
+    let result = validate_access_token("not-a-jwt-token", "secret");
     assert!(result.is_err(), "malformed token should fail validation");
 }
 
 #[test]
-fn test_token_validate_empty() {
-    let result = validate_token("", "secret");
+fn test_access_token_validate_empty() {
+    let result = validate_access_token("", "secret");
     assert!(result.is_err(), "empty token should fail validation");
 }

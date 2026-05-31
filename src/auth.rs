@@ -1,16 +1,49 @@
-//! Authentication utilities: password hashing, session tokens, first-boot seed.
+//! Authentication utilities: password hashing, session tokens, refresh tokens,
+//! and first-boot seed.
 
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sha2::{Digest, Sha256};
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::errors::AuthError;
+
+// ─── User model ──────────────────────────────────────────────────────────────
+
+/// Minimal user model for authentication.
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct User {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+    pub password_hash: String,
+}
+
+/// Public-facing user info (no password hash).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+}
+
+/// Look up a user by email.
+pub async fn find_user_by_email(pool: &PgPool, email: &str) -> Result<Option<User>, AuthError> {
+    let user = sqlx::query_as::<_, User>(
+        "SELECT id, name, email, password_hash FROM users WHERE email = $1",
+    )
+    .bind(email)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AuthError::Internal(e.to_string()))?;
+    Ok(user)
+}
 
 // ─── Password ─────────────────────────────────────────────────────────────────
 
@@ -38,21 +71,22 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool, AuthError> {
 /// JWT claims for admin session tokens.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    /// User ID (UUID as string).
     pub sub: String,
-    /// Expiration timestamp (UTC epoch seconds).
     pub exp: usize,
-    /// Issued-at timestamp (UTC epoch seconds).
     pub iat: usize,
 }
 
-/// Create a signed JWT session token for the given user.
-pub fn create_token(user_id: Uuid, secret: &str) -> Result<String, AuthError> {
+/// Create a short-lived JWT access token.
+pub fn create_access_token(
+    user_id: Uuid,
+    secret: &str,
+    ttl_seconds: i64,
+) -> Result<String, AuthError> {
     let now = Utc::now();
     let claims = Claims {
         sub: user_id.to_string(),
         iat: now.timestamp() as usize,
-        exp: (now.timestamp() + 86_400) as usize, // 24 hours
+        exp: (now.timestamp() + ttl_seconds) as usize,
     };
     encode(
         &Header::default(),
@@ -62,8 +96,8 @@ pub fn create_token(user_id: Uuid, secret: &str) -> Result<String, AuthError> {
     .map_err(|e| AuthError::Internal(e.to_string()))
 }
 
-/// Validate a JWT session token and return its claims.
-pub fn validate_token(token: &str, secret: &str) -> Result<Claims, AuthError> {
+/// Validate a JWT access token and return its claims.
+pub fn validate_access_token(token: &str, secret: &str) -> Result<Claims, AuthError> {
     let token_data = decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
@@ -76,10 +110,79 @@ pub fn validate_token(token: &str, secret: &str) -> Result<Claims, AuthError> {
     Ok(token_data.claims)
 }
 
+// ─── Refresh Token ────────────────────────────────────────────────────────────
+
+/// Generate a random refresh token, store its SHA-256 hash in the DB,
+/// and return the raw token to the client.
+pub async fn issue_refresh_token(
+    pool: &PgPool,
+    user_id: Uuid,
+    token_bytes: usize,
+    ttl_days: i64,
+) -> Result<String, AuthError> {
+    let raw: Vec<u8> = (0..token_bytes).map(|_| rand::random::<u8>()).collect();
+    let raw_token = hex::encode(&raw);
+    let hash = sha256_hex(&raw_token);
+    let expires_at = Utc::now() + Duration::days(ttl_days);
+
+    sqlx::query("INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)")
+        .bind(user_id)
+        .bind(&hash)
+        .bind(expires_at)
+        .execute(pool)
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+    Ok(raw_token)
+}
+
+/// Consume (look up + revoke) a refresh token. Returns the user_id on success.
+/// The token is one-time-use: revoked after successful consumption.
+pub async fn consume_refresh_token(pool: &PgPool, raw_token: &str) -> Result<Uuid, AuthError> {
+    let hash = sha256_hex(raw_token);
+
+    let record = sqlx::query(
+        "SELECT id, user_id FROM refresh_tokens
+         WHERE token_hash = $1 AND revoked = FALSE AND expires_at > NOW()",
+    )
+    .bind(&hash)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AuthError::Internal(e.to_string()))?
+    .ok_or(AuthError::InvalidToken)?;
+
+    let token_id: Uuid = record.get("id");
+    let user_id: Uuid = record.get("user_id");
+
+    // Revoke it (one-time use)
+    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1")
+        .bind(token_id)
+        .execute(pool)
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+    Ok(user_id)
+}
+
+/// Revoke all refresh tokens for a user (e.g., password change).
+pub async fn revoke_user_tokens(pool: &PgPool, user_id: Uuid) -> Result<(), AuthError> {
+    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE")
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
+    Ok(())
+}
+
+fn sha256_hex(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
 // ─── First-boot seed ──────────────────────────────────────────────────────────
 
-/// Ensure an admin user exists. If no users are found, create one from the
-/// provided email and password. This runs once on first startup.
+/// Ensure an admin user exists. If no users are found, create one from env vars.
 pub async fn ensure_admin(pool: &PgPool, email: &str, password: &str) -> Result<(), AuthError> {
     let exists = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users)")
         .fetch_one(pool)
