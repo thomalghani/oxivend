@@ -1,0 +1,11 @@
+docs/*
+
+# Added by cargo
+/target
+
+# Environment files
+.env
+
+# AI tools
+.opencode*
+.AGENTS.md
