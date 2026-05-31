@@ -7,6 +7,7 @@ use crate::errors::ConfigError;
 /// All environment variables are read once here and passed explicitly to
 /// the functions that need them. This avoids scattered `std::env::var()`
 /// calls throughout the codebase.
+#[derive(Debug)]
 pub struct Config {
     pub database_url: String,
     pub database_pool_size: u32,

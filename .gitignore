@@ -7,5 +7,6 @@ docs/*
 .env
 
 # AI tools
-.opencode*
-.AGENTS.md
+.opencode/*
+opencode.json
+AGENTS.md
