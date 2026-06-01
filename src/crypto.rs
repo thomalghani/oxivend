@@ -1,11 +1,18 @@
 //! Ed25519 cryptographic utilities for license signing and verification.
+//! Also provides AES-256-GCM private key encryption.
 
+use aes_gcm::{
+    Aes256Gcm, Key, Nonce,
+    aead::{Aead, KeyInit},
+};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use rand::RngCore;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::errors::CryptoError;
@@ -80,4 +87,57 @@ pub fn verify_license(key: &VerifyingKey, token: &str) -> Result<LicensePayload,
     })?;
 
     Ok(payload)
+}
+
+// ─── Private key encryption ───────────────────────────────────────────────────
+
+/// Encrypt an Ed25519 private key using AES-256-GCM.
+///
+/// The 256-bit key is derived from `encryption_key` via SHA-256.
+/// Output format: base64(12-byte-nonce || ciphertext)
+#[allow(deprecated)]
+pub fn encrypt_private_key(
+    private_key: &[u8],
+    encryption_key: &str,
+) -> Result<String, CryptoError> {
+    let key_bytes = Sha256::digest(encryption_key.as_bytes());
+    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+    let cipher = Aes256Gcm::new(key);
+
+    let mut nonce_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext = cipher
+        .encrypt(nonce, private_key)
+        .map_err(|e| CryptoError::InvalidKey(format!("Encryption failed: {e}")))?;
+
+    let mut out = Vec::with_capacity(12 + ciphertext.len());
+    out.extend_from_slice(&nonce_bytes);
+    out.extend_from_slice(&ciphertext);
+
+    Ok(BASE64.encode(&out))
+}
+
+/// Decrypt an Ed25519 private key that was encrypted with [`encrypt_private_key`].
+#[allow(deprecated)]
+pub fn decrypt_private_key(encrypted: &str, encryption_key: &str) -> Result<Vec<u8>, CryptoError> {
+    let data = BASE64
+        .decode(encrypted)
+        .map_err(|_| CryptoError::InvalidKey("Invalid base64 in encrypted key".into()))?;
+
+    if data.len() < 12 {
+        return Err(CryptoError::InvalidKey("Encrypted key too short".into()));
+    }
+
+    let (nonce_bytes, ciphertext) = data.split_at(12);
+    let nonce = Nonce::from_slice(nonce_bytes);
+
+    let key_bytes = Sha256::digest(encryption_key.as_bytes());
+    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+    let cipher = Aes256Gcm::new(key);
+
+    cipher.decrypt(nonce, ciphertext).map_err(|_| {
+        CryptoError::InvalidKey("Decryption failed — wrong key or corrupted data".into())
+    })
 }

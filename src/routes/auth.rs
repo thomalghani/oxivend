@@ -161,21 +161,21 @@ pub struct AuthErrorResponse {
 }
 
 impl AuthErrorResponse {
-    fn invalid_credentials() -> Self {
+    pub fn invalid_credentials() -> Self {
         Self {
             error: "Invalid email or password",
             status: StatusCode::UNAUTHORIZED,
         }
     }
 
-    fn invalid_token() -> Self {
+    pub fn invalid_token() -> Self {
         Self {
             error: "Invalid or expired token",
             status: StatusCode::UNAUTHORIZED,
         }
     }
 
-    fn internal() -> Self {
+    pub fn internal() -> Self {
         Self {
             error: "Internal server error",
             status: StatusCode::INTERNAL_SERVER_ERROR,

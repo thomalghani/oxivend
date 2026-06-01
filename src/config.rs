@@ -14,6 +14,7 @@ pub struct Config {
     pub admin_email: String,
     pub admin_password: String,
     pub jwt_secret: String,
+    pub private_key_encryption_key: String,
     pub access_token_ttl_seconds: i64,
     pub refresh_token_ttl_days: i64,
     pub refresh_token_bytes: usize,
@@ -37,6 +38,8 @@ impl Config {
                 .map_err(|_| ConfigError::MissingEnvVar("OXIVEND_ADMIN_PASSWORD"))?,
             jwt_secret: std::env::var("JWT_SECRET")
                 .unwrap_or_else(|_| "changeme-dev-secret".to_string()),
+            private_key_encryption_key: std::env::var("PRIVATE_KEY_ENCRYPTION_KEY")
+                .unwrap_or_else(|_| "dev-encryption-key-123".to_string()),
             access_token_ttl_seconds: std::env::var("ACCESS_TOKEN_TTL_SECONDS")
                 .ok()
                 .and_then(|v| v.parse().ok())
