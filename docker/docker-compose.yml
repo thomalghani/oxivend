@@ -9,6 +9,22 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oxivend"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  oxivend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3000:3000"
+    env_file: .env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:

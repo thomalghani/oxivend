@@ -185,13 +185,12 @@ fn sha256_hex(input: &str) -> String {
 /// Ensure an admin user exists. If the email is not found, create one from env vars.
 /// Idempotent — safe to call concurrently from tests.
 pub async fn ensure_admin(pool: &PgPool, email: &str, password: &str) -> Result<(), AuthError> {
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)",
-    )
-    .bind(email)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| AuthError::Internal(e.to_string()))?;
+    let exists =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+            .bind(email)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| AuthError::Internal(e.to_string()))?;
 
     if exists {
         tracing::info!("Admin user {email} already exists, skipping seed");

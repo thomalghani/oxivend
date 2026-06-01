@@ -2,8 +2,8 @@
 
 mod common;
 
-use axum::http::{Method, Request, StatusCode};
 use axum::body::Body;
+use axum::http::{Method, Request, StatusCode};
 use tower::ServiceExt;
 
 #[tokio::test]

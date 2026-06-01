@@ -10,6 +10,7 @@ use crate::state::AppState;
 
 pub mod auth;
 pub mod health;
+pub mod licenses;
 pub mod products;
 
 /// Build the application router with all routes attached.
@@ -22,10 +23,13 @@ pub fn app_router(state: Arc<AppState>) -> Router {
         .route("/products/{id}", delete(products::delete_product))
         .route("/products/{id}/keys", post(products::generate_keys));
 
+    let license_routes = Router::new().route("/licenses", post(licenses::post_license));
+
     Router::new()
         .route("/health", get(health::health))
         .route("/login", post(auth::login))
         .route("/auth/refresh", post(auth::refresh))
         .merge(product_routes)
+        .merge(license_routes)
         .with_state(state)
 }

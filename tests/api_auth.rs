@@ -45,8 +45,7 @@ async fn refresh_token_roundtrip() {
 
     // Login first
     let email = std::env::var("OXIVEND_ADMIN_EMAIL").unwrap_or_else(|_| "admin@example.com".into());
-    let password =
-        std::env::var("OXIVEND_ADMIN_PASSWORD").unwrap_or_else(|_| "changeme".into());
+    let password = std::env::var("OXIVEND_ADMIN_PASSWORD").unwrap_or_else(|_| "changeme".into());
     let login_body = serde_json::json!({ "email": email, "password": password });
     let (login_status, login_json) = common::post(&router, "/login", None, &login_body).await;
     assert_eq!(login_status, StatusCode::OK);
@@ -63,8 +62,7 @@ async fn refresh_token_roundtrip() {
     assert!(!refresh_json["refresh_token"].as_str().unwrap().is_empty());
 
     // Old refresh token should be consumed (one-time use)
-    let (second_status, _) =
-        common::post(&router, "/auth/refresh", None, &refresh_body).await;
+    let (second_status, _) = common::post(&router, "/auth/refresh", None, &refresh_body).await;
     assert_eq!(
         second_status,
         StatusCode::UNAUTHORIZED,

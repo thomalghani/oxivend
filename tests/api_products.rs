@@ -76,8 +76,12 @@ async fn get_product_not_found() {
     let (router, _) = common::setup().await;
     let token = common::login(&router).await;
 
-    let (status, _) =
-        common::get(&router, "/products/00000000-0000-0000-0000-000000000000", &token).await;
+    let (status, _) = common::get(
+        &router,
+        "/products/00000000-0000-0000-0000-000000000000",
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -92,8 +96,7 @@ async fn update_product() {
     let id = create_json["id"].as_str().unwrap();
 
     let update = serde_json::json!({ "name": "Updated", "price": 2500, "max_activations": 5 });
-    let (status, json) =
-        common::put(&router, &format!("/products/{id}"), &token, &update).await;
+    let (status, json) = common::put(&router, &format!("/products/{id}"), &token, &update).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["name"], "Updated");
@@ -127,8 +130,7 @@ async fn soft_delete_product() {
     let (_, create_json) = common::post(&router, "/products", Some(&token), &body).await;
     let id = create_json["id"].as_str().unwrap();
 
-    let (status, _) =
-        common::delete(&router, &format!("/products/{id}"), &token).await;
+    let (status, _) = common::delete(&router, &format!("/products/{id}"), &token).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     // Product should no longer be visible
@@ -141,8 +143,12 @@ async fn delete_product_not_found() {
     let (router, _) = common::setup().await;
     let token = common::login(&router).await;
 
-    let (status, _) =
-        common::delete(&router, "/products/00000000-0000-0000-0000-000000000000", &token).await;
+    let (status, _) = common::delete(
+        &router,
+        "/products/00000000-0000-0000-0000-000000000000",
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -156,8 +162,13 @@ async fn generate_keys_for_product() {
     let (_, create_json) = common::post(&router, "/products", Some(&token), &body).await;
     let id = create_json["id"].as_str().unwrap();
 
-    let (status, json) =
-        common::post(&router, &format!("/products/{id}/keys"), Some(&token), &serde_json::json!({})).await;
+    let (status, json) = common::post(
+        &router,
+        &format!("/products/{id}/keys"),
+        Some(&token),
+        &serde_json::json!({}),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["product_id"], id);

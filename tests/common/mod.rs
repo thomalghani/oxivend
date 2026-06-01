@@ -39,8 +39,7 @@ pub async fn setup() -> (axum::Router, Config) {
 /// Login with the seeded admin credentials and return the access token.
 pub async fn login(router: &axum::Router) -> String {
     let email = std::env::var("OXIVEND_ADMIN_EMAIL").unwrap_or_else(|_| "admin@example.com".into());
-    let password =
-        std::env::var("OXIVEND_ADMIN_PASSWORD").unwrap_or_else(|_| "changeme".into());
+    let password = std::env::var("OXIVEND_ADMIN_PASSWORD").unwrap_or_else(|_| "changeme".into());
 
     let body = serde_json::json!({ "email": email, "password": password });
     let response = router
@@ -65,11 +64,7 @@ pub async fn login(router: &axum::Router) -> String {
 }
 
 /// Make an authenticated GET request.
-pub async fn get(
-    router: &axum::Router,
-    uri: &str,
-    token: &str,
-) -> (StatusCode, Value) {
+pub async fn get(router: &axum::Router, uri: &str, token: &str) -> (StatusCode, Value) {
     let response = router
         .clone()
         .oneshot(
@@ -86,8 +81,7 @@ pub async fn get(
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("failed to read body");
-    let json: Value =
-        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    let json: Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
     (status, json)
 }
 
@@ -118,8 +112,7 @@ pub async fn post(
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("failed to read body");
-    let json: Value =
-        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    let json: Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
     (status, json)
 }
 
@@ -147,17 +140,12 @@ pub async fn put(
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("failed to read body");
-    let json: Value =
-        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    let json: Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
     (status, json)
 }
 
 /// Make an authenticated DELETE request.
-pub async fn delete(
-    router: &axum::Router,
-    uri: &str,
-    token: &str,
-) -> (StatusCode, Value) {
+pub async fn delete(router: &axum::Router, uri: &str, token: &str) -> (StatusCode, Value) {
     let response = router
         .clone()
         .oneshot(
@@ -174,7 +162,6 @@ pub async fn delete(
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("failed to read body");
-    let json: Value =
-        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    let json: Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
     (status, json)
 }

@@ -10,3 +10,9 @@ docs/*
 .opencode/*
 opencode.json
 AGENTS.md
+
+# Makefile artifacts
+.token
+.login.json
+.product.json
+Makefile
